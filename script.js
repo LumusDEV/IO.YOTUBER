@@ -1,38 +1,118 @@
-import { createClient } from '@supabase/supabase-js';
+// Crea o apri il database
+const request = indexedDB.open('gameDatabase', 1); // "gameDatabase" è il nome del database
 
-// Configurazione di Supabase
-const supabaseUrl = 'https://ietepvtfcxzajqvqgely.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlldGVwdnRmY3h6YWpxdnFnZWx5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzI4NTY2OTMsImV4cCI6MjA0ODQzMjY5M30.cJF8TejUeapwU_Wx9jRN56hxlC5yPdRQpFGhvDp54f8';
-const supabase = createClient(supabaseUrl, supabaseKey);
+let db;
 
-// Funzione per salvare i dati utente
-async function saveUserData(username, xp, coins, level) {
-  const { data, error } = await supabase
-    .from('users')
-    .upsert({ username, xp, coins, level });
-
-  if (error) {
-    console.error('Errore nel salvataggio dei dati:', error);
-  } else {
-    console.log('Dati utente salvati:', data);
-  }
+// Funzione per disabilitare un pulsante per 2 secondi
+function disableButton(buttonId) {
+    const button = document.getElementById(buttonId);
+    button.disabled = true;  // Disabilita il pulsante
+    setTimeout(() => {
+        button.disabled = false;  // Riabilita il pulsante dopo 2 secondi
+    }, 2000); // 2000 ms = 2 secondi
 }
 
-// Funzione per ottenere i dati utente
-async function getUserData(username) {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('username', username)
-    .single();
+request.onupgradeneeded = function(event) {
+    db = event.target.result;
 
-  if (error) {
-    console.error('Errore nel recupero dei dati:', error);
-  } else {
-    console.log('Dati utente:', data);
-  }
+    // Se il database è nuovo, creiamo una nuova "store" per i dati degli utenti
+    if (!db.objectStoreNames.contains('userData')) {
+        db.createObjectStore('userData', { keyPath: 'id' }); // id è la chiave primaria
+    }
+};
+
+request.onerror = function(event) {
+    console.error("Errore nell'aprire il database", event);
+};
+
+request.onsuccess = function(event) {
+    db = event.target.result;
+    console.log("Database aperto con successo");
+};
+
+// Funzione per salvare i dati dell'utente
+function saveUserData(userId, xp, coins) {
+    disableButton('saveButton'); // Disabilita il pulsante per 2 secondi
+
+    const transaction = db.transaction(['userData'], 'readwrite');
+    const store = transaction.objectStore('userData');
+
+    const userData = {
+        id: userId, // l'ID dell'utente è la chiave
+        xp: xp,
+        coins: coins
+    };
+
+    const request = store.put(userData); // 'put' salva o aggiorna i dati
+
+    request.onsuccess = function() {
+        console.log('Dati salvati con successo');
+    };
+
+    request.onerror = function(event) {
+        console.error('Errore nel salvataggio dei dati', event);
+    };
 }
 
-// Esempio di salvataggio e lettura dei dati
-saveUserData('player1', 100, 50, 5);
-getUserData('player1');
+// Funzione per ottenere i dati dell'utente
+function getUserData(userId) {
+    disableButton('loadButton'); // Disabilita il pulsante per 2 secondi
+
+    const transaction = db.transaction(['userData'], 'readonly');
+    const store = transaction.objectStore('userData');
+
+    const request = store.get(userId); // Recupera i dati per l'ID utente
+
+    request.onsuccess = function(event) {
+        const userData = event.target.result;
+        if (userData) {
+            console.log('Dati recuperati:', userData);
+        } else {
+            console.log('Nessun dato trovato per l\'utente', userId);
+        }
+    };
+
+    request.onerror = function(event) {
+        console.error('Errore nel recupero dei dati', event);
+    };
+}
+
+// Funzione per aggiornare i dati dell'utente
+function updateUserData(userId, newXp, newCoins) {
+    disableButton('updateButton'); // Disabilita il pulsante per 2 secondi
+
+    const transaction = db.transaction(['userData'], 'readwrite');
+    const store = transaction.objectStore('userData');
+
+    const request = store.get(userId);
+
+    request.onsuccess = function(event) {
+        const userData = event.target.result;
+        if (userData) {
+            // Aggiorna i dati
+            userData.xp = newXp;
+            userData.coins = newCoins;
+
+            const updateRequest = store.put(userData); // Usa 'put' per aggiornare
+
+            updateRequest.onsuccess = function() {
+                console.log('Dati aggiornati con successo');
+            };
+        } else {
+            console.log('Utente non trovato');
+        }
+    };
+
+    request.onerror = function(event) {
+        console.error('Errore nel recupero per aggiornamento', event);
+    };
+}
+
+// Funzione per chiudere il database
+function closeDatabase() {
+    if (db) {
+        db.close();
+        console.log("Database chiuso");
+    }
+}
+
